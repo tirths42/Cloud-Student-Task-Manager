@@ -1,0 +1,10 @@
+__pycache__
+*.py[cod]
+.env
+.venv
+venv
+.git
+tasks.db
+*.db
+service-account*.json
+credentials*.json
