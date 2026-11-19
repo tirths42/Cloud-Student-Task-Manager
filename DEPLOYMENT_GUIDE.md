@@ -1,64 +1,38 @@
-# Deployment guide — Google Cloud Run + Firestore
+# Free deployment: Render + Supabase
 
-**This ZIP contains source code, not a deployed service.** Google Cloud generates the public URL only after you deploy it in your own project.
+This version is configured for a free-tier demonstration. Render Free web services sleep after 15 minutes of inactivity; the first request after sleep can take around a minute. Supabase Free PostgreSQL includes 500 MB and may pause after a week of low activity. Free tiers can change; check current limits before deployment.
 
-## 1. Create a Google Cloud project
-1. Open https://console.cloud.google.com/ and create/select a project.
-2. Link billing if required. Review pricing and configure a budget alert.
-3. In Cloud Shell run:
+## 1. Create Supabase database
+1. Sign up at https://supabase.com/ and create a project on the Free plan.
+2. Choose a strong database password and save it privately.
+3. Wait until the project is ready.
+4. Open SQL Editor > New query. Copy all of `supabase_schema.sql` into the editor and click Run.
+5. Open Project Settings > API. Copy the Project URL and the `service_role` secret key. Treat the service-role key as a password. Never commit it to GitHub or put it in frontend code.
 
-```bash
-gcloud config set project YOUR_PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com firestore.googleapis.com
-```
+## 2. Ensure GitHub repository has every file
+The repository must contain `app.py`, `requirements.txt`, `render.yaml`, `supabase_schema.sql`, `templates/index.html`, `static/css/style.css`, and `static/js/app.js`. Upload the full contents of this project folder, including the `templates` and `static` directories. Do not upload `.env`, passwords, or API keys.
 
-## 2. Create Firestore
-1. Open Firestore in the Cloud Console.
-2. Create a Native mode database named `(default)`.
-3. Choose an appropriate location, for example `asia-south1` (Mumbai) where available. Location cannot be changed later.
-4. Use production mode rules. Do not make the database publicly readable.
+## 3. Deploy on Render
+1. Sign up at https://render.com/ and connect your GitHub account.
+2. Choose New > Web Service. Select `tirths42/Cloud-Student-Task-Manager` (or your updated repository).
+3. Select branch `main`. Runtime: Python. Region: choose a nearby available region.
+4. Choose the Free instance type.
+5. Build command: `pip install -r requirements.txt`
+6. Start command: `gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4`
+7. Under Environment Variables add: `SUPABASE_URL` = your Supabase Project URL; `SUPABASE_SERVICE_ROLE_KEY` = your Supabase service_role secret key; `SUPABASE_TABLE` = `tasks`.
+8. Click Create Web Service and wait for the deploy to finish. Copy the public `onrender.com` URL.
 
-## 3. Configure IAM
-Use a dedicated Cloud Run runtime service account and grant it `roles/datastore.user` on the project. Do not download or commit service-account JSON keys. Cloud Run uses Application Default Credentials.
+## 4. Verify cloud database (do not skip)
+1. Open `https://YOUR-RENDER-URL/health`; expect `status: ok`.
+2. Open `https://YOUR-RENDER-URL/api/status`; verify `compute.is_render` is true, `storage.connected` is true, and `storage.mode` is `supabase_postgres`.
+3. In the app, add a task. Refresh the page; it should remain.
+4. In Supabase > Table Editor > tasks, verify the task row exists.
+5. Test edit, complete, and delete.
 
-## 4. Deploy
-Upload/extract this project folder in Cloud Shell and change into it. Run:
+If `/api/status` says `local_sqlite`, the app is NOT using the cloud database. Check the two Supabase environment variables and Render logs. If database operations fail, confirm the SQL schema was run and the table is named `tasks`.
 
-```bash
-gcloud run deploy student-task-manager \
-  --source . \
-  --region asia-south1 \
-  --allow-unauthenticated \
-  --service-account YOUR_RUNTIME_SERVICE_ACCOUNT \
-  --memory 512Mi --cpu 1 --min 0 --max 2 \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,FIRESTORE_DATABASE=\(default\),FIRESTORE_COLLECTION=tasks,CLOUD_RUN_REGION=asia-south1
-```
+## 5. Submission evidence
+Capture genuine screenshots of: (a) Render deployment showing Live and service URL, (b) app loaded at the public URL, (c) `/api/status` with Render and Supabase connected, and (d) Supabase Table Editor showing a task row. Fill `PRACTICAL_REPORT.md` with your real project URL and actual test results.
 
-Replace both placeholders. Copy the Service URL printed by the deployment.
-
-## 5. Verify
-- Open the Cloud Run URL and add a task.
-- Refresh; confirm the task persists.
-- Open `SERVICE_URL/api/status`; verify `compute.is_cloud_run=true` and `storage.connected=true`.
-- Open `SERVICE_URL/health`; expect `status: ok`.
-- Confirm the task exists in Firestore collection `tasks`.
-- Capture your own screenshots of the live service and Firestore console.
-
-## 6. Resource management
-The deployment limits compute to 1 vCPU, 512 MiB, minimum 0 and maximum 2 instances. Scale-to-zero reduces idle compute but does not guarantee zero charges; builds, image storage, logs, networking and database operations may still incur costs. Monitor Billing, Cloud Run metrics and logs. Remove the service when finished if no longer needed:
-
-```bash
-gcloud run services delete student-task-manager --region asia-south1
-```
-
-## Local development
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-Open http://127.0.0.1:8080. Without GCP configuration, SQLite is used for local testing and the status indicator reports local mode.
+## Cost and security notes
+Use only the Free plans and do not select paid instances or upgrades. Free services have limits and can be suspended/paused; this is suitable for a practical demonstration, not guaranteed always-on production hosting. Keep the Supabase service-role key only in Render environment variables. Do not publish it in GitHub, screenshots, or the browser.

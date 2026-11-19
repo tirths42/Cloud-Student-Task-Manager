@@ -1,8 +1,8 @@
 import os, tempfile, unittest
 class AppTests(unittest.TestCase):
  def setUp(self):
-  self.tmp=tempfile.TemporaryDirectory();os.environ['LOCAL_DB_PATH']=os.path.join(self.tmp.name,'test.db');os.environ.pop('GOOGLE_CLOUD_PROJECT',None);os.environ.pop('GCP_PROJECT_ID',None)
-  import app;app._firestore=None;self.client=app.app.test_client()
+  self.tmp=tempfile.TemporaryDirectory();os.environ['LOCAL_DB_PATH']=os.path.join(self.tmp.name,'test.db');os.environ.pop('SUPABASE_URL',None);os.environ.pop('SUPABASE_SERVICE_ROLE_KEY',None)
+  import app;app._supabase=None;self.client=app.app.test_client()
  def tearDown(self):self.tmp.cleanup()
  def test_health(self):self.assertEqual(self.client.get('/health').status_code,200)
  def test_dashboard(self):self.assertEqual(self.client.get('/').status_code,200)

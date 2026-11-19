@@ -1,46 +1,27 @@
 # Cloud-Based Student Task Manager — GMIU Practical
 
-A task-manager web application for demonstrating cloud compute, database storage, public hosting and resource management.
-
-## Architecture
-```text
-Browser --HTTPS--> Google Cloud Run (Flask + Gunicorn)
-                           |
-                           +----> Google Cloud Firestore (tasks collection)
-```
+Flask task manager deployed on Render Free with Supabase PostgreSQL Free.
 
 ## Features
 - Create, edit, complete and delete tasks
 - Search and filter by status and priority
-- Dashboard statistics and health endpoints
-- Responsive interface
-- Firestore persistence on Cloud Run
-- SQLite fallback for local testing only; status reports it honestly
+- Health and deployment status endpoints
+- Supabase PostgreSQL persistence in cloud deployment
+- SQLite is used only for local development when Supabase variables are absent
 
-## Main files
-`app.py` backend/API · `templates/index.html` dashboard · `static/` CSS/JS · `Dockerfile` container · `cloudbuild.yaml` build pipeline template · `DEPLOYMENT_GUIDE.md` deployment steps · `PRACTICAL_REPORT.md` report template · `test_app.py` tests.
-
-## Run locally
-Python 3.10+:
+## Local run
 ```bash
 python -m venv .venv
-# Windows PowerShell: .venv\Scripts\Activate.ps1
+# Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 python app.py
 ```
-Open http://127.0.0.1:8080. Without GCP credentials, data is stored in local `tasks.db`; this is not cloud storage.
+Open http://127.0.0.1:8080. Local SQLite is not cloud storage.
 
-Run tests:
-```bash
-python -m unittest -v test_app.py
-```
+## Free cloud deployment
+Follow `DEPLOYMENT_GUIDE.md`. Create a Supabase Free project, run `supabase_schema.sql`, and deploy this repository to Render Free. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_TABLE=tasks` as Render environment variables. Never commit secrets.
 
-## Deploy
-Follow `DEPLOYMENT_GUIDE.md`. Create your own GCP project and Firestore database, grant the Cloud Run runtime identity `roles/datastore.user`, and deploy. The real service URL is generated during deployment and is not pre-filled here.
-
-## GitHub
-Create your own repository and upload the extracted contents of this ZIP. Do not upload `.env`, database files or service-account credentials.
-
-## Reference
-Prepared independently with a similar task-manager concept to the public reference repository https://github.com/shreyash2256/Cloud-Student-Task-Manager. This package is not affiliated with or a modification of that repository.
+## Status checks
+- `/health` should return `status: ok`.
+- `/api/status` should show `compute.is_render=true`, `storage.connected=true`, and `storage.mode=supabase_postgres`.

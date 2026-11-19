@@ -7,26 +7,30 @@ load_dotenv()
 logging.basicConfig(level=os.getenv('LOG_LEVEL','INFO'))
 log=logging.getLogger('cloud_task_manager')
 app=Flask(__name__)
-PROJECT_ID=os.getenv('GOOGLE_CLOUD_PROJECT') or os.getenv('GCP_PROJECT_ID')
-DATABASE_ID=os.getenv('FIRESTORE_DATABASE','(default)')
-COLLECTION=os.getenv('FIRESTORE_COLLECTION','tasks')
-_firestore=None
-_firestore_error=None
+SUPABASE_URL=os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY=os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+COLLECTION=os.getenv('SUPABASE_TABLE','tasks')
+_supabase=None
+_supabase_error=None
 
 def now(): return datetime.now(timezone.utc).isoformat()
-def firestore_client():
-    global _firestore,_firestore_error
-    if _firestore is not None: return _firestore
-    if not PROJECT_ID:
-        _firestore_error='Set GOOGLE_CLOUD_PROJECT to enable Firestore.'
+def supabase_client():
+    """Return a server-side Supabase client, or None when not configured."""
+    global _supabase, _supabase_error
+    if _supabase is not None:
+        return _supabase
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        _supabase_error='Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to enable cloud PostgreSQL.'
         return None
     try:
-        from google.cloud import firestore
-        _firestore=firestore.Client(project=PROJECT_ID,database=DATABASE_ID)
-        _firestore_error=None
-        return _firestore
+        from supabase import create_client
+        _supabase=create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        _supabase_error=None
+        return _supabase
     except Exception as exc:
-        _firestore_error=str(exc); log.warning('Firestore unavailable: %s',exc); return None
+        _supabase_error=str(exc)
+        log.warning('Supabase unavailable: %s', exc)
+        return None
 
 def local_db():
     conn=sqlite3.connect(os.getenv('LOCAL_DB_PATH','tasks.db')); conn.row_factory=sqlite3.Row
@@ -34,42 +38,52 @@ def local_db():
     conn.commit(); return conn
 
 class Store:
-    def __init__(self): self.fs=firestore_client()
+    def __init__(self):
+        self.sb=supabase_client()
+
     @property
-    def mode(self): return 'cloud_firestore' if self.fs else 'local_sqlite'
+    def mode(self):
+        return 'supabase_postgres' if self.sb else 'local_sqlite'
+
     def list(self):
-        if self.fs:
-            out=[]
-            for d in self.fs.collection(COLLECTION).stream(): out.append((d.to_dict() or {}) | {'task_id':d.id})
-            return sorted(out,key=lambda x:x.get('created_at',''),reverse=True)
-        with local_db() as c: return [dict(r)|{'is_completed':bool(r['is_completed'])} for r in c.execute('SELECT * FROM tasks ORDER BY created_at DESC')]
+        if self.sb:
+            result=self.sb.table(COLLECTION).select('*').order('created_at', desc=True).execute()
+            return result.data or []
+        with local_db() as c:
+            return [dict(r)|{'is_completed':bool(r['is_completed'])} for r in c.execute('SELECT * FROM tasks ORDER BY created_at DESC')]
+
     def get(self,tid):
-        if self.fs:
-            d=self.fs.collection(COLLECTION).document(tid).get()
-            return ((d.to_dict() or {})|{'task_id':d.id}) if d.exists else None
+        if self.sb:
+            result=self.sb.table(COLLECTION).select('*').eq('task_id',tid).limit(1).execute()
+            return result.data[0] if result.data else None
         with local_db() as c:
             r=c.execute('SELECT * FROM tasks WHERE task_id=?',(tid,)).fetchone()
             return (dict(r)|{'is_completed':bool(r['is_completed'])}) if r else None
+
     def create(self,x):
-        if self.fs: self.fs.collection(COLLECTION).document(x['task_id']).set(x)
+        if self.sb:
+            self.sb.table(COLLECTION).insert(x).execute()
         else:
-            with local_db() as c: c.execute('INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?)',(x['task_id'],x['title'],x['subject'],x['description'],x['priority'],x['due_date'],0,x['created_at'],x['updated_at']))
+            with local_db() as c:
+                c.execute('INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?)',(x['task_id'],x['title'],x['subject'],x['description'],x['priority'],x['due_date'],0,x['created_at'],x['updated_at']))
+
     def update(self,tid,changes):
-        if self.fs:
-            ref=self.fs.collection(COLLECTION).document(tid)
-            if not ref.get().exists:return False
-            ref.update(changes);return True
+        if self.sb:
+            result=self.sb.table(COLLECTION).update(changes).eq('task_id',tid).select('*').execute()
+            return bool(result.data)
         allowed=('title','subject','description','priority','due_date','is_completed','updated_at')
         pairs=[(k,v) for k,v in changes.items() if k in allowed]
         if not pairs:return False
         sets=','.join(k+'=?' for k,v in pairs); vals=[int(v) if k=='is_completed' else v for k,v in pairs]
-        with local_db() as c: return c.execute('UPDATE tasks SET '+sets+' WHERE task_id=?',vals+[tid]).rowcount>0
+        with local_db() as c:
+            return c.execute('UPDATE tasks SET '+sets+' WHERE task_id=?',vals+[tid]).rowcount>0
+
     def delete(self,tid):
-        if self.fs:
-            ref=self.fs.collection(COLLECTION).document(tid)
-            if not ref.get().exists:return False
-            ref.delete();return True
-        with local_db() as c:return c.execute('DELETE FROM tasks WHERE task_id=?',(tid,)).rowcount>0
+        if self.sb:
+            result=self.sb.table(COLLECTION).delete().eq('task_id',tid).select('*').execute()
+            return bool(result.data)
+        with local_db() as c:
+            return c.execute('DELETE FROM tasks WHERE task_id=?',(tid,)).rowcount>0
 
 def validate(data):
     title=str(data.get('title','')).strip(); subject=str(data.get('subject','General')).strip() or 'General'; desc=str(data.get('description','')).strip(); priority=str(data.get('priority','Medium')).capitalize(); due=str(data.get('due_date','')).strip()
@@ -86,8 +100,8 @@ def index(): return render_template('index.html')
 def health(): return jsonify({'status':'ok','time':now()})
 @app.get('/api/status')
 def status():
-    s=Store(); run=bool(os.getenv('K_SERVICE'))
-    return jsonify({'status':'healthy','compute':{'platform':'Google Cloud Run' if run else 'Local development','is_cloud_run':run,'service':os.getenv('K_SERVICE'),'region':os.getenv('CLOUD_RUN_REGION')},'storage':{'service':'Google Cloud Firestore' if s.fs else 'Local SQLite (development fallback)','connected':bool(s.fs),'mode':s.mode,'collection':COLLECTION if s.fs else None,'error':None if s.fs else _firestore_error}})
+    s=Store(); render=bool(os.getenv('RENDER'))
+    return jsonify({'status':'healthy','compute':{'platform':'Render' if render else 'Local development','is_render':render,'service':os.getenv('RENDER_SERVICE_NAME')},'storage':{'service':'Supabase PostgreSQL' if s.sb else 'Local SQLite (development fallback)','connected':bool(s.sb),'mode':s.mode,'table':COLLECTION if s.sb else None,'error':None if s.sb else _supabase_error}})
 @app.get('/api/tasks')
 def list_tasks():
     try:
@@ -112,7 +126,7 @@ def create_task():
     try:
         s=Store();s.create(x);return jsonify({'success':True,'message':'Task created.','task':x,'storage':s.mode}),201
     except Exception:
-        log.exception('Create task failure');return jsonify({'success':False,'error':'Unable to save task. Check Firestore permissions or local storage.'}),503
+        log.exception('Create task failure');return jsonify({'success':False,'error':'Unable to save task. Check Supabase table/credentials or local storage.'}),503
 @app.put('/api/tasks/<tid>')
 def update_task(tid):
     x,err=validate(request.get_json(silent=True) or {})

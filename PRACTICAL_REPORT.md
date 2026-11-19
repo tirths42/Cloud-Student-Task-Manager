@@ -10,36 +10,36 @@
 - Institution: Gyanmanjari Innovative University (GMIU), Bhavnagar
 - Date: [Submission date]
 - GitHub repository: [Repository URL]
-- Deployed application: [Cloud Run URL after deployment]
+- Deployed application: [Render URL after deployment]
 
 ## 1. Aim
-To build and deploy a basic web application using cloud compute and storage services, demonstrate public internet accessibility and observe basic resource management using Google Cloud Run and Google Cloud Firestore.
+To build and deploy a basic web application using cloud compute and storage services, demonstrate public internet accessibility and observe basic resource management using Render and Supabase PostgreSQL.
 
 ## 2. Objectives
 1. Develop a browser-based application.
-2. Host the Flask application on Cloud Run.
-3. Store records persistently in Firestore.
+2. Host the Flask application on Render.
+3. Store records persistently in Supabase PostgreSQL.
 4. Verify the public HTTPS URL.
 5. Inspect health, logs and resource limits.
 
 ## 3. Technology
-HTML5, CSS3, JavaScript, Python, Flask, Gunicorn, Docker, Google Cloud Run, Google Cloud Firestore and GitHub.
+HTML5, CSS3, JavaScript, Python, Flask, Gunicorn, Docker, Render, Supabase PostgreSQL and GitHub.
 
 ## 4. Architecture
-Browser → HTTPS → Cloud Run (Flask/Gunicorn container) → Firestore. Cloud Run executes application logic and handles requests. Firestore stores task documents independently of an individual container instance. Cloud Logging and Cloud Monitoring provide operational visibility.
+Browser → HTTPS → Render (Flask/Gunicorn) → Supabase PostgreSQL. Render executes application logic and handles HTTP requests. Supabase PostgreSQL stores task records independently of the application container. Render deployment logs help with troubleshooting.
 
 ## 5. Features
 Create, edit, complete and delete tasks; filter by status and priority; search tasks; dashboard counts; and a service-status endpoint.
 
 ## 6. Implementation
-The Flask backend exposes REST endpoints under `/api/tasks`. It validates task fields and uses the Firestore Python client when the project configuration and runtime credentials are available. Without GCP access, local development uses SQLite and the status endpoint identifies it as a local fallback rather than cloud storage.
+The Flask backend exposes REST endpoints under `/api/tasks`. It validates task fields and uses Supabase PostgreSQL when the Render environment variables are configured. Local development uses SQLite and the status endpoint identifies it as a local fallback rather than cloud storage.
 
 ## 7. Deployment record
-- GCP Project ID: [Project ID]
-- Firestore region: [Region]
-- Runtime service account: [Service account]
-- IAM role granted: `roles/datastore.user`
-- Cloud Run service: `student-task-manager`
+- Supabase Project: [Project name / reference ID]
+- Supabase PostgreSQL region: [Region]
+- Render service: [Service name]
+- Database access: server-side Supabase service-role key stored in Render environment variables
+- Render service name: [Your actual service name]
 - Public URL: [Actual URL]
 
 ## 8. Test results — complete after testing
@@ -51,18 +51,18 @@ The Flask backend exposes REST endpoints under `/api/tasks`. It validates task f
 | Toggle status | Status changes and persists | [Pass/Fail + notes] |
 | Edit task | Updated details appear | [Pass/Fail + notes] |
 | Delete task | Task is removed | [Pass/Fail + notes] |
-| `/api/status` | Cloud Run active and Firestore connected | [Observed JSON] |
-| Firestore console | Task document exists | [Pass/Fail + notes] |
+| `/api/status` | Render active and Supabase PostgreSQL connected | [Observed JSON] |
+| Supabase Table Editor | Task row exists in `tasks` table | [Pass/Fail + notes] |
 
 ## 9. Resource management
-Deployment parameters: 1 vCPU, 512 MiB memory, minimum instances 0 and maximum instances 2. Scale-to-zero can reduce idle compute usage. It does not remove charges for other resources such as builds, images, logs, network use or database operations. Monitor Cloud Billing and Cloud Monitoring.
+Render Free web services sleep after 15 minutes of inactivity and use ephemeral filesystems. Supabase Free includes 500 MB database storage and may pause after a week of low activity. Monitor both dashboards and remain within free-tier limits.
 
 ## 10. Screenshots to insert
-1. Live application with public Cloud Run URL visible.
+1. Live application with public Render URL visible.
 2. Tasks created in the application.
-3. `/api/status` showing Cloud Run active and Firestore connected.
-4. Firestore console showing the `tasks` collection.
-5. Optional Cloud Run metrics/logs.
+3. `/api/status` showing Render active and Supabase PostgreSQL connected.
+4. Supabase Table Editor showing a row in the `tasks` table.
+5. Optional Render metrics/logs.
 
 Use screenshots captured from your own deployment, not mock evidence.
 
@@ -72,12 +72,12 @@ Use screenshots captured from your own deployment, not mock evidence.
 ## 12. Viva questions
 **What is cloud computing?** On-demand access to computing, storage and other IT resources over a network.
 
-**What is Cloud Run?** A managed platform for running containerized applications without managing servers directly.
+**What is Render?** A cloud platform for deploying and hosting web applications.
 
-**What is Firestore?** A managed NoSQL document database organized into collections and documents.
+**What is Supabase?** A managed backend platform that includes a PostgreSQL relational database.
 
-**Why use Firestore rather than a local file?** Firestore provides managed persistent storage independent of an application container.
+**Why use Supabase PostgreSQL rather than a local file?** Supabase PostgreSQL provides managed persistent storage independent of an application container.
 
-**What is IAM?** Identity and Access Management controls which identities can access cloud resources and what actions they can perform.
+**Why keep the service-role key secret?** It has elevated database privileges and must remain on the server, never in frontend code or a public repository.
 
 **What is scale-to-zero?** The service can reduce active compute instances to zero when there is no traffic; it does not mean all associated resources are free.
